@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rino Weather Dashboard 🌧️✨</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #eef2f7; padding: 15px; border-radius: 10px; text-align: center; }
+        .stat-card h3 { margin: 0; color: #7f8c8d; font-size: 0.85em; }
+        .stat-card p { font-size: 1.3em; font-weight: bold; margin: 8px 0 0; color: #2980b9; }
+        .chart-container { margin-top: 25px; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #eee; }
+        h2 { font-size: 1.2em; margin-bottom: 15px; color: #34495e; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9em; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: #f8f9fa; }
+        .status-icon { font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Rino Weather Dashboard 🌧️✨</h1>
+        
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3>Latest Avg Temp</h3>
+                <p id="latestTemp">-- °C</p>
+            </div>
+            <div class="stat-card">
+                <h3>Latest Max/Min</h3>
+                <p id="latestMaxMin">-- / -- °C</p>
+            </div>
+            <div class="stat-card">
+                <h3>Latest Rain Prob</h3>
+                <p id="latestRain">-- %</p>
+            </div>
+            <div class="stat-card">
+                <h3>Latest Humidity</h3>
+                <p id="latestHumidity">-- %</p>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>Temperature Trends (°C)</h2>
+            <canvas id="tempChart" height="150"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>Rain Probability Trends (%)</h2>
+            <canvas id="rainChart" height="70"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>Humidity Trends (%)</h2>
+            <canvas id="humidityChart" height="70"></canvas>
+        </div>
+
+        <h2>Historical Data</h2>
+        <div style="overflow-x: auto;">
+            <table id="weatherTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Avg Temp</th>
+                        <th>Max/Min</th>
+                        <th>Rain Prob</th>
+                        <th>Humidity</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('weather-log.md', { cache: 'no-store' });
+                const text = await response.text();
+                const lines = text.trim().split('\n').filter(line => line.includes('|') && !line.includes('---') && !line.includes('Date'));
+
+                const dates = [];
+                const temps = { avg: [], max: [], min: [] };
+                const rains = [];
+                const humidities = [];
+                const tableBody = document.querySelector('#weatherTable tbody');
+
+                lines.forEach((line, index) => {
+                    const parts = line.split('|').map(s => s.trim()).filter(s => s !== '');
+                    if (parts.length >= 7) {
+                        const [date, avg, rain, humidity, max, min, status] = parts;
+                        
+                        // Latest data for cards
+                        if (index === lines.length - 1) {
+                            document.getElementById('latestTemp').textContent = avg + ' °C';
+                            document.getElementById('latestMaxMin').textContent = `${max} / ${min} °C`;
+                            document.getElementById('latestRain').textContent = rain + ' %';
+                            document.getElementById('latestHumidity').textContent = humidity + ' %';
+                        }
+
+                        dates.push(date);
+                        temps.avg.push(parseFloat(avg));
+                        temps.max.push(parseFloat(max));
+                        temps.min.push(parseFloat(min));
+                        rains.push(parseFloat(rain));
+                        humidities.push(parseFloat(humidity));
+
+                        const row = `<tr>
+                            <td>${date}</td>
+                            <td>${avg} °C</td>
+                            <td>${max} / ${min} °C</td>
+                            <td>${rain} %</td>
+                            <td>${humidity} %</td>
+                            <td class="status-icon">${status}</td>
+                        </tr>`;
+                        tableBody.insertAdjacentHTML('afterbegin', row);
+                    }
+                });
+
+                const commonOptions = {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    scales: {
+                        x: { ticks: { font: { size: 10 } } },
+                        y: { beginAtZero: false, ticks: { font: { size: 10 } } }
+                    }
+                };
+
+                // Temperature Chart (Line)
+                new Chart(document.getElementById('tempChart'), {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [
+                            { label: 'Max', data: temps.max, borderColor: '#e74c3c', backgroundColor: '#e74c3c', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#e74c3c' },
+                            { label: 'Avg', data: temps.avg, borderColor: '#e67e22', backgroundColor: 'rgba(230, 126, 34, 0.2)', fill: true, tension: 0.3 },
+                            { label: 'Min', data: temps.min, borderColor: '#3498db', backgroundColor: '#3498db', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#2ecc71' }
+                        ]
+                    },
+                    options: commonOptions
+                });
+
+                // Rain Chart (Bar)
+                new Chart(document.getElementById('rainChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: [{ label: 'Rain Prob (%)', data: rains, backgroundColor: 'rgba(52, 152, 219, 0.7)', borderColor: '#2980b9', borderWidth: 1 }]
+                    },
+                    options: { ...commonOptions, scales: { ...commonOptions.scales, y: { min: 0, max: 100, ticks: { font: { size: 10 } } } } }
+                });
+
+                // Humidity Chart (Bar)
+                new Chart(document.getElementById('humidityChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: [{ label: 'Humidity (%)', data: humidities, backgroundColor: 'rgba(26, 188, 156, 0.7)', borderColor: '#16a085', borderWidth: 1 }]
+                    },
+                    options: { ...commonOptions, scales: { ...commonOptions.scales, y: { min: 0, max: 100, ticks: { font: { size: 10 } } } } }
+                });
+
+            } catch (e) {
+                console.error("Error loading weather data:", e);
+            }
+        }
+        loadData();
+    </script>
+</body>
+</html>
