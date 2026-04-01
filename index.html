@@ -8,7 +8,9 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; text-align: center; }
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 20px; }
+        .controls { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        select { padding: 8px 15px; border-radius: 8px; border: 1px solid #ccc; background: white; font-size: 14px; cursor: pointer; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
         .stat-card { background: #eef2f7; padding: 15px; border-radius: 10px; text-align: center; }
         .stat-card h3 { margin: 0; color: #7f8c8d; font-size: 0.85em; }
@@ -25,6 +27,12 @@
     <div class="container">
         <h1>Rino Weather Dashboard 🌧️✨</h1>
         
+        <div class="controls">
+            <select id="monthSelect">
+                <option value="all">所有時間</option>
+            </select>
+        </div>
+
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card">
                 <h3>Latest Avg Temp</h3>
@@ -78,98 +86,124 @@
     </div>
 
     <script>
+        let allData = [];
+        let charts = {};
+
         async function loadData() {
             try {
                 const response = await fetch('weather-log.md', { cache: 'no-store' });
                 const text = await response.text();
                 const lines = text.trim().split('\n').filter(line => line.includes('|') && !line.includes('---') && !line.includes('Date'));
 
-                const dates = [];
-                const temps = { avg: [], max: [], min: [] };
-                const rains = [];
-                const humidities = [];
-                const tableBody = document.querySelector('#weatherTable tbody');
-
-                lines.forEach((line, index) => {
+                allData = lines.map(line => {
                     const parts = line.split('|').map(s => s.trim()).filter(s => s !== '');
                     if (parts.length >= 7) {
                         const [date, avg, rain, humidity, max, min, status] = parts;
-                        
-                        // Latest data for cards
-                        if (index === lines.length - 1) {
-                            document.getElementById('latestTemp').textContent = avg + ' °C';
-                            document.getElementById('latestMaxMin').textContent = `${max} / ${min} °C`;
-                            document.getElementById('latestRain').textContent = rain + ' %';
-                            document.getElementById('latestHumidity').textContent = humidity + ' %';
-                        }
-
-                        dates.push(date);
-                        temps.avg.push(parseFloat(avg));
-                        temps.max.push(parseFloat(max));
-                        temps.min.push(parseFloat(min));
-                        rains.push(parseFloat(rain));
-                        humidities.push(parseFloat(humidity));
-
-                        const row = `<tr>
-                            <td>${date}</td>
-                            <td>${avg} °C</td>
-                            <td>${max} / ${min} °C</td>
-                            <td>${rain} %</td>
-                            <td>${humidity} %</td>
-                            <td class="status-icon">${status}</td>
-                        </tr>`;
-                        tableBody.insertAdjacentHTML('afterbegin', row);
+                        return { date, avg, rain, humidity, max, min, status };
                     }
-                });
+                    return null;
+                }).filter(d => d !== null);
 
-                const commonOptions = {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
-                    scales: {
-                        x: { ticks: { font: { size: 10 } } },
-                        y: { beginAtZero: false, ticks: { font: { size: 10 } } }
-                    }
-                };
+                populateMonthSelect();
+                updateDashboard('all');
 
-                // Temperature Chart (Line)
-                new Chart(document.getElementById('tempChart'), {
-                    type: 'line',
-                    data: {
-                        labels: dates,
-                        datasets: [
-                            { label: 'Max', data: temps.max, borderColor: '#e74c3c', backgroundColor: '#e74c3c', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#e74c3c' },
-                            { label: 'Avg', data: temps.avg, borderColor: '#e67e22', backgroundColor: 'rgba(230, 126, 34, 0.2)', fill: true, tension: 0.3 },
-                            { label: 'Min', data: temps.min, borderColor: '#3498db', backgroundColor: '#3498db', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#2ecc71' }
-                        ]
-                    },
-                    options: commonOptions
-                });
-
-                // Rain Chart (Bar)
-                new Chart(document.getElementById('rainChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: dates,
-                        datasets: [{ label: 'Rain Prob (%)', data: rains, backgroundColor: 'rgba(52, 152, 219, 0.7)', borderColor: '#2980b9', borderWidth: 1 }]
-                    },
-                    options: { ...commonOptions, scales: { ...commonOptions.scales, y: { min: 0, max: 100, ticks: { font: { size: 10 } } } } }
-                });
-
-                // Humidity Chart (Bar)
-                new Chart(document.getElementById('humidityChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: dates,
-                        datasets: [{ label: 'Humidity (%)', data: humidities, backgroundColor: 'rgba(26, 188, 156, 0.7)', borderColor: '#16a085', borderWidth: 1 }]
-                    },
-                    options: { ...commonOptions, scales: { ...commonOptions.scales, y: { min: 0, max: 100, ticks: { font: { size: 10 } } } } }
+                document.getElementById('monthSelect').addEventListener('change', (e) => {
+                    updateDashboard(e.target.value);
                 });
 
             } catch (e) {
                 console.error("Error loading weather data:", e);
             }
         }
+
+        function populateMonthSelect() {
+            const monthSelect = document.getElementById('monthSelect');
+            const months = [...new Set(allData.map(d => d.date.substring(0, 7)))].sort().reverse();
+            
+            months.forEach(month => {
+                const option = document.createElement('option');
+                option.value = month;
+                option.textContent = month;
+                monthSelect.appendChild(option);
+            });
+        }
+
+        function updateDashboard(filter) {
+            const filteredData = filter === 'all' 
+                ? allData 
+                : allData.filter(d => d.date.startsWith(filter));
+
+            if (filteredData.length === 0) return;
+
+            // Update Cards with the latest overall data (always use allData's last item for current status)
+            const latest = allData[allData.length - 1];
+            document.getElementById('latestTemp').textContent = latest.avg + ' °C';
+            document.getElementById('latestMaxMin').textContent = `${latest.max} / ${latest.min} °C`;
+            document.getElementById('latestRain').textContent = latest.rain + ' %';
+            document.getElementById('latestHumidity').textContent = latest.humidity + ' %';
+
+            // Prepare Chart Data
+            const labels = filteredData.map(d => d.date);
+            const avgTemps = filteredData.map(d => parseFloat(d.avg));
+            const maxTemps = filteredData.map(d => parseFloat(d.max));
+            const minTemps = filteredData.map(d => parseFloat(d.min));
+            const rains = filteredData.map(d => parseFloat(d.rain));
+            const humidities = filteredData.map(d => parseFloat(d.humidity));
+
+            // Update Table
+            const tableBody = document.querySelector('#weatherTable tbody');
+            tableBody.innerHTML = '';
+            [...filteredData].reverse().forEach(d => {
+                const row = `<tr>
+                    <td>${d.date}</td>
+                    <td>${d.avg} °C</td>
+                    <td>${d.max} / ${d.min} °C</td>
+                    <td>${d.rain} %</td>
+                    <td>${d.humidity} %</td>
+                    <td class="status-icon">${d.status}</td>
+                </tr>`;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+
+            // Update Charts
+            updateChart('tempChart', 'line', labels, [
+                { label: 'Max', data: maxTemps, borderColor: '#e74c3c', backgroundColor: '#e74c3c', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#e74c3c' },
+                { label: 'Avg', data: avgTemps, borderColor: '#e67e22', backgroundColor: 'rgba(230, 126, 34, 0.2)', fill: true, tension: 0.3 },
+                { label: 'Min', data: minTemps, borderColor: '#3498db', backgroundColor: '#3498db', fill: false, borderDash: [5, 5], tension: 0.3, pointStyle: 'circle', pointRadius: 5, pointBackgroundColor: '#2ecc71' }
+            ]);
+
+            updateChart('rainChart', 'bar', labels, [
+                { label: 'Rain Prob (%)', data: rains, backgroundColor: 'rgba(52, 152, 219, 0.7)', borderColor: '#2980b9', borderWidth: 1 }
+            ], { min: 0, max: 100 });
+
+            updateChart('humidityChart', 'bar', labels, [
+                { label: 'Humidity (%)', data: humidities, backgroundColor: 'rgba(26, 188, 156, 0.7)', borderColor: '#16a085', borderWidth: 1 }
+            ], { min: 0, max: 100 });
+        }
+
+        function updateChart(id, type, labels, datasets, yAxisLimits = null) {
+            if (charts[id]) {
+                charts[id].destroy();
+            }
+
+            const ctx = document.getElementById(id).getContext('2d');
+            const options = {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { ticks: { font: { size: 10 } } },
+                    y: { 
+                        beginAtZero: false, 
+                        ticks: { font: { size: 10 } },
+                        ...(yAxisLimits || {})
+                    }
+                }
+            };
+
+            charts[id] = new Chart(ctx, { type, data: { labels, datasets }, options });
+        }
+
         loadData();
     </script>
 </body>
