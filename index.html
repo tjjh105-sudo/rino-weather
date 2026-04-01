@@ -105,7 +105,11 @@
                 }).filter(d => d !== null);
 
                 populateMonthSelect();
-                updateDashboard('all');
+                
+                // Set default filter to the latest month
+                const latestMonth = document.getElementById('monthSelect').options[1]?.value || 'all';
+                document.getElementById('monthSelect').value = latestMonth;
+                updateDashboard(latestMonth);
 
                 document.getElementById('monthSelect').addEventListener('change', (e) => {
                     updateDashboard(e.target.value);
